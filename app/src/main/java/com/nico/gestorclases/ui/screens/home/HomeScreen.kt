@@ -11,7 +11,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.nico.gestorclases.data.model.ClaseConAlumno
+import com.nico.gestorclases.data.model.ClaseConAlumnos
+import com.nico.gestorclases.data.model.EstadoClase
 import com.nico.gestorclases.ui.components.ClaseCard
 import com.nico.gestorclases.ui.components.EmptyState
 import com.nico.gestorclases.ui.dialogs.AddEditClaseDialog
@@ -27,7 +28,7 @@ fun HomeScreen(viewModel: HomeViewModel) {
     val hoy = LocalDate.now()
 
     var mostrarDialogoAdd by remember { mutableStateOf(false) }
-    var claseAEditar by remember { mutableStateOf<ClaseConAlumno?>(null) }
+    var claseAEditar by remember { mutableStateOf<ClaseConAlumnos?>(null) }
 
     Scaffold(
         topBar = {
@@ -72,10 +73,18 @@ fun HomeScreen(viewModel: HomeViewModel) {
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(clasesDeHoy, key = { it.clase.id }) { claseConAlumno ->
+                items(clasesDeHoy, key = { it.clase.id }) { claseConAlumnos ->
                     ClaseCard(
-                        claseConAlumno = claseConAlumno,
-                        onClick = { claseAEditar = claseConAlumno }
+                        claseConAlumnos = claseConAlumnos,
+                        onEdit = { claseAEditar = claseConAlumnos },
+                        onMarkDada = {
+                            viewModel.actualizarClase(
+                                claseConAlumnos.clase.copy(estadoClase = EstadoClase.DADA)
+                            )
+                        },
+                        onMarkPagado = { crossRef ->
+                            viewModel.marcarPagado(crossRef)
+                        }
                     )
                 }
             }
@@ -87,26 +96,31 @@ fun HomeScreen(viewModel: HomeViewModel) {
             alumnos = alumnos,
             fechaInicial = hoy,
             onDismiss = { mostrarDialogoAdd = false },
-            onConfirm = { nuevaClase ->
-                viewModel.agregarClase(nuevaClase)
+            onConfirm = { resultado ->
+                viewModel.agregarClase(resultado.clase, resultado.crossRefs)
                 mostrarDialogoAdd = false
+            },
+            validarSolapamiento = { fecha, inicio, fin, ignorarId ->
+                viewModel.validarSolapamiento(fecha, inicio, fin, ignorarId)
             }
         )
     }
 
     claseAEditar?.let { cxa ->
         AddEditClaseDialog(
-            claseConAlumno = cxa,
+            claseConAlumnos = cxa,
             alumnos = alumnos,
-            fechaInicial = hoy, // no cambia la fecha original del dialogo a menos que el usuario lo haga
             onDismiss = { claseAEditar = null },
-            onConfirm = { claseActualizada ->
-                viewModel.actualizarClase(claseActualizada)
+            onConfirm = { resultado ->
+                viewModel.actualizarClaseConAlumnos(resultado.clase, resultado.crossRefs)
                 claseAEditar = null
             },
             onDelete = {
                 viewModel.eliminarClase(cxa.clase)
                 claseAEditar = null
+            },
+            validarSolapamiento = { fecha, inicio, fin, ignorarId ->
+                viewModel.validarSolapamiento(fecha, inicio, fin, ignorarId)
             }
         )
     }

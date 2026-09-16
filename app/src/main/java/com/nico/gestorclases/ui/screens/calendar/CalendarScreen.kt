@@ -23,7 +23,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.nico.gestorclases.data.model.ClaseConAlumno
+import com.nico.gestorclases.data.model.ClaseConAlumnos
+import com.nico.gestorclases.data.model.EstadoClase
 import com.nico.gestorclases.ui.components.ClaseCard
 import com.nico.gestorclases.ui.components.EmptyState
 import com.nico.gestorclases.ui.dialogs.AddEditClaseDialog
@@ -45,7 +46,7 @@ fun CalendarScreen(viewModel: CalendarViewModel) {
 
     var mostrarCierre by remember { mutableStateOf(false) }
     var mostrarDialogoAdd by remember { mutableStateOf(false) }
-    var claseAEditar by remember { mutableStateOf<ClaseConAlumno?>(null) }
+    var claseAEditar by remember { mutableStateOf<ClaseConAlumnos?>(null) }
 
     Scaffold(
         topBar = {
@@ -98,7 +99,6 @@ fun CalendarScreen(viewModel: CalendarViewModel) {
                 }
             }
 
-            // Calendario Grid
             CustomCalendar(
                 mesActual = mesActual,
                 fechaSeleccionada = fechaSeleccionada,
@@ -108,7 +108,6 @@ fun CalendarScreen(viewModel: CalendarViewModel) {
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
-            // Clases del día seleccionado
             Text(
                 text = "Clases del ${fechaSeleccionada.dayOfMonth}",
                 style = MaterialTheme.typography.titleMedium,
@@ -129,10 +128,18 @@ fun CalendarScreen(viewModel: CalendarViewModel) {
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(clasesDelDia, key = { it.clase.id }) { claseConAlumno ->
+                    items(clasesDelDia, key = { it.clase.id }) { claseConAlumnos ->
                         ClaseCard(
-                            claseConAlumno = claseConAlumno,
-                            onClick = { claseAEditar = claseConAlumno }
+                            claseConAlumnos = claseConAlumnos,
+                            onEdit = { claseAEditar = claseConAlumnos },
+                            onMarkDada = {
+                                viewModel.actualizarClase(
+                                    claseConAlumnos.clase.copy(estadoClase = EstadoClase.DADA)
+                                )
+                            },
+                            onMarkPagado = { crossRef ->
+                                viewModel.marcarPagado(crossRef)
+                            }
                         )
                     }
                 }
@@ -152,26 +159,32 @@ fun CalendarScreen(viewModel: CalendarViewModel) {
             alumnos = alumnos,
             fechaInicial = fechaSeleccionada,
             onDismiss = { mostrarDialogoAdd = false },
-            onConfirm = { nuevaClase ->
-                viewModel.agregarClase(nuevaClase)
+            onConfirm = { resultado ->
+                viewModel.agregarClase(resultado.clase, resultado.crossRefs)
                 mostrarDialogoAdd = false
+            },
+            validarSolapamiento = { fecha, inicio, fin, ignorarId ->
+                viewModel.validarSolapamiento(fecha, inicio, fin, ignorarId)
             }
         )
     }
 
     claseAEditar?.let { cxa ->
         AddEditClaseDialog(
-            claseConAlumno = cxa,
+            claseConAlumnos = cxa,
             alumnos = alumnos,
             fechaInicial = fechaSeleccionada,
             onDismiss = { claseAEditar = null },
-            onConfirm = { claseActualizada ->
-                viewModel.actualizarClase(claseActualizada)
+            onConfirm = { resultado ->
+                viewModel.actualizarClaseConAlumnos(resultado.clase, resultado.crossRefs)
                 claseAEditar = null
             },
             onDelete = {
                 viewModel.eliminarClase(cxa.clase)
                 claseAEditar = null
+            },
+            validarSolapamiento = { fecha, inicio, fin, ignorarId ->
+                viewModel.validarSolapamiento(fecha, inicio, fin, ignorarId)
             }
         )
     }
@@ -187,13 +200,10 @@ fun CustomCalendar(
     val diasDeLaSemana = listOf("L", "M", "M", "J", "V", "S", "D")
     val primerDiaDelMes = mesActual.atDay(1)
     val ultimoDiaDelMes = mesActual.atEndOfMonth()
-    
-    // DayOfWeek.value es 1 (Lunes) a 7 (Domingo)
     val celdasVaciasAlInicio = primerDiaDelMes.dayOfWeek.value - 1
     val totalDias = ultimoDiaDelMes.dayOfMonth
 
     Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        // Encabezado de días de la semana
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
             diasDeLaSemana.forEach { dia ->
                 Text(
@@ -206,10 +216,9 @@ fun CustomCalendar(
                 )
             }
         }
-        
+
         Spacer(Modifier.height(8.dp))
 
-        // Grilla de días
         LazyVerticalGrid(
             columns = GridCells.Fixed(7),
             modifier = Modifier.heightIn(max = 300.dp)
@@ -243,7 +252,6 @@ fun CustomCalendar(
                             color = if (esSeleccionado) MaterialTheme.colorScheme.onPrimary
                             else MaterialTheme.colorScheme.onSurface
                         )
-                        // Indicador de clases
                         if (tieneClases) {
                             Box(
                                 modifier = Modifier

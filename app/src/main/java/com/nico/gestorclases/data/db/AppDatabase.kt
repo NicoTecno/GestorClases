@@ -7,10 +7,11 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.nico.gestorclases.data.model.Alumno
 import com.nico.gestorclases.data.model.Clase
+import com.nico.gestorclases.data.model.ClaseAlumnoCrossRef
 
 @Database(
-    entities = [Alumno::class, Clase::class],
-    version = 1,
+    entities = [Alumno::class, Clase::class, ClaseAlumnoCrossRef::class],
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -29,7 +30,11 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "gestor_clases_db"
-                ).build()
+                )
+                    // Migración destructiva aceptada en desarrollo (v1 → v2).
+                    // Los datos existentes se borrarán al actualizar.
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

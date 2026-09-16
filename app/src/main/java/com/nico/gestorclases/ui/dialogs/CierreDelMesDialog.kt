@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nico.gestorclases.viewmodel.CierreDelMesInfo
 import com.nico.gestorclases.utils.DateUtils.formatPrice
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,6 +121,32 @@ fun CierreDelMesDialog(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 8.dp)
                 )
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+            val exportLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                contract = androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/pdf")
+            ) { uri ->
+                if (uri != null) {
+                    coroutineScope.launch {
+                        val success = com.nico.gestorclases.utils.PdfExporter.exportCierreToPdf(context, uri, info)
+                        if (success) {
+                            android.widget.Toast.makeText(context, "PDF guardado exitosamente", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            android.widget.Toast.makeText(context, "Error al guardar PDF", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+
+            Button(
+                onClick = { exportLauncher.launch("Cierre_Mes_${info.mesAnio.replace(" ", "_")}.pdf") },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Exportar PDF")
             }
         }
     }

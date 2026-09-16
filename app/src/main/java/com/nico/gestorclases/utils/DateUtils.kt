@@ -55,14 +55,37 @@ object DateUtils {
     }
 
     /**
-     * Formatea precio en pesos argentinos
+     * Formatea precio en pesos argentinos (formato contable ej. $ 10.000,00)
      */
     fun formatPrice(value: Double): String {
-        val formattedValue = if (value == value.toLong().toDouble()) {
-            value.toLong().toString()
-        } else {
-            String.format("%.2f", value)
-        }
-        return "$ $formattedValue"
+        val format = java.text.NumberFormat.getCurrencyInstance(localeEs)
+        return format.format(value)
+    }
+
+    // ─────────────────── Validación de horarios ───────────────────
+
+    /**
+     * Convierte una hora en formato "HH:mm" a minutos desde la medianoche.
+     * Ej: "09:30" → 570
+     */
+    fun String.toMinutes(): Int {
+        val parts = this.split(":")
+        val h = parts.getOrNull(0)?.toIntOrNull() ?: 0
+        val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
+        return h * 60 + m
+    }
+
+    /**
+     * Determina si dos intervalos horarios se solapan.
+     * El solapamiento ocurre cuando: inicio1 < fin2 && fin1 > inicio2
+     * Dos clases que van exactamente de 10:00 a 11:00 y de 11:00 a 12:00
+     * NO se solapan (el límite es exclusivo).
+     */
+    fun haySolapamiento(inicio1: String, fin1: String, inicio2: String, fin2: String): Boolean {
+        val i1 = inicio1.toMinutes()
+        val f1 = fin1.toMinutes()
+        val i2 = inicio2.toMinutes()
+        val f2 = fin2.toMinutes()
+        return i1 < f2 && f1 > i2
     }
 }

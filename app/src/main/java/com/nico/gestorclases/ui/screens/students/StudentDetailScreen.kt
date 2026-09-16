@@ -20,10 +20,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nico.gestorclases.data.model.Alumno
+import com.nico.gestorclases.data.model.ClaseConAlumnos
+import com.nico.gestorclases.data.model.EstadoClase
 import com.nico.gestorclases.ui.components.ClaseCard
 import com.nico.gestorclases.ui.components.EmptyState
 import com.nico.gestorclases.ui.components.NivelBadge
 import com.nico.gestorclases.ui.dialogs.AddEditAlumnoDialog
+import com.nico.gestorclases.ui.dialogs.AddEditClaseDialog
 import com.nico.gestorclases.utils.DateUtils.toDisplayString
 import com.nico.gestorclases.utils.DateUtils.toLocalDate
 import com.nico.gestorclases.viewmodel.StudentsViewModel
@@ -38,11 +41,14 @@ fun StudentDetailScreen(
     val clases by viewModel.clasesDelAlumnoSeleccionado.collectAsState()
 
     var mostrarDialogoEdit by remember { mutableStateOf(false) }
+    var claseAEditar by remember { mutableStateOf<ClaseConAlumnos?>(null) }
 
     if (alumno == null) {
         onBack()
         return
     }
+
+    val alumnoActual = alumno!!
 
     Scaffold(
         topBar = {
@@ -66,12 +72,10 @@ fun StudentDetailScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Perfil header
-            StudentProfileHeader(alumno = alumno!!)
+            StudentProfileHeader(alumno = alumnoActual)
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp))
 
-            // Historial de clases
             Text(
                 text = "Historial de Clases",
                 style = MaterialTheme.typography.titleMedium,
@@ -92,18 +96,27 @@ fun StudentDetailScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(clases, key = { it.clase.id }) { claseConAlumno ->
+                    items(clases, key = { it.clase.id }) { claseConAlumnos ->
                         Column {
-                            // Separador visual de fecha
                             Text(
-                                text = claseConAlumno.clase.fecha.toLocalDate().toDisplayString(),
+                                text = claseConAlumnos.clase.fecha.toLocalDate().toDisplayString(),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(start = 8.dp, bottom = 4.dp)
                             )
+                            // Pasamos alumnoFiltradoId para mostrar el precio/pago de ESTE alumno
                             ClaseCard(
-                                claseConAlumno = claseConAlumno,
-                                onClick = { /* Podríamos abrir edición de clase desde acá en el futuro */ }
+                                claseConAlumnos = claseConAlumnos,
+                                alumnoFiltradoId = alumnoActual.id,
+                                onEdit = { claseAEditar = claseConAlumnos },
+                                onMarkDada = {
+                                    viewModel.actualizarClase(
+                                        claseConAlumnos.clase.copy(estadoClase = EstadoClase.DADA)
+                                    )
+                                },
+                                onMarkPagado = { crossRef ->
+                                    viewModel.marcarPagado(crossRef)
+                                }
                             )
                         }
                     }
@@ -114,12 +127,29 @@ fun StudentDetailScreen(
 
     if (mostrarDialogoEdit) {
         AddEditAlumnoDialog(
-            alumno = alumno,
+            alumno = alumnoActual,
             onDismiss = { mostrarDialogoEdit = false },
             onConfirm = { alumnoEditado ->
                 viewModel.actualizarAlumno(alumnoEditado)
                 viewModel.seleccionarAlumno(alumnoEditado)
                 mostrarDialogoEdit = false
+            }
+        )
+    }
+
+    claseAEditar?.let { cxa ->
+        AddEditClaseDialog(
+            claseConAlumnos = cxa,
+            // En detalle de alumno, mostramos todos los alumnos para poder agregar al grupo
+            alumnos = listOf(alumnoActual),
+            fechaInicial = cxa.clase.fecha.toLocalDate(),
+            onDismiss = { claseAEditar = null },
+            onConfirm = { resultado ->
+                viewModel.actualizarClaseConAlumnos(resultado.clase, resultado.crossRefs)
+                claseAEditar = null
+            },
+            validarSolapamiento = { fecha, inicio, fin, ignorarId ->
+                viewModel.validarSolapamiento(fecha, inicio, fin, ignorarId)
             }
         )
     }
@@ -147,17 +177,17 @@ private fun StudentProfileHeader(alumno: Alumno) {
                 fontWeight = FontWeight.Bold
             )
         }
-        
+
         Spacer(Modifier.height(16.dp))
-        
+
         Text(
             text = alumno.nombreCompleto,
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold
         )
-        
+
         Spacer(Modifier.height(8.dp))
-        
+
         NivelBadge(label = alumno.nivelEducativo.displayName)
 
         if (alumno.telefono.isNotBlank() || alumno.telefonoTutor.isNotBlank() || alumno.notas.isNotBlank()) {

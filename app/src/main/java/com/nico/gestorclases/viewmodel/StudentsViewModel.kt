@@ -3,7 +3,9 @@ package com.nico.gestorclases.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nico.gestorclases.data.model.Alumno
-import com.nico.gestorclases.data.model.ClaseConAlumno
+import com.nico.gestorclases.data.model.Clase
+import com.nico.gestorclases.data.model.ClaseAlumnoCrossRef
+import com.nico.gestorclases.data.model.ClaseConAlumnos
 import com.nico.gestorclases.data.repository.AlumnoRepository
 import com.nico.gestorclases.data.repository.ClaseRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -33,7 +35,7 @@ class StudentsViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val clasesDelAlumnoSeleccionado: StateFlow<List<ClaseConAlumno>> =
+    val clasesDelAlumnoSeleccionado: StateFlow<List<ClaseConAlumnos>> =
         _alumnoSeleccionado.flatMapLatest { alumno ->
             if (alumno != null) {
                 claseRepository.getClasesDeAlumno(alumno.id)
@@ -61,4 +63,35 @@ class StudentsViewModel(
     fun eliminarAlumno(alumno: Alumno) = viewModelScope.launch {
         alumnoRepository.eliminarAlumno(alumno)
     }
+
+    // ─────────────────── Acciones sobre Clases ───────────────────
+
+    /** Actualiza solo el evento (estadoClase, fecha, horas). */
+    fun actualizarClase(clase: Clase) = viewModelScope.launch {
+        claseRepository.actualizarClase(clase)
+    }
+
+    /** Actualiza la clase y todos sus participantes (edición completa). */
+    fun actualizarClaseConAlumnos(clase: Clase, crossRefs: List<ClaseAlumnoCrossRef>) =
+        viewModelScope.launch {
+            claseRepository.actualizarClaseConAlumnos(clase, crossRefs)
+        }
+
+    /** Marca el pago de un alumno específico en una clase. */
+    fun marcarPagado(crossRef: ClaseAlumnoCrossRef) = viewModelScope.launch {
+        claseRepository.actualizarParticipante(
+            crossRef.copy(estadoPago = com.nico.gestorclases.data.model.EstadoPago.PAGADA)
+        )
+    }
+
+    fun eliminarClase(clase: Clase) = viewModelScope.launch {
+        claseRepository.eliminarClase(clase)
+    }
+
+    suspend fun validarSolapamiento(
+        fecha: Long,
+        horaInicio: String,
+        horaFin: String,
+        claseIdIgnorar: Int = 0
+    ): Boolean = claseRepository.haySolapamientoDeHorario(fecha, horaInicio, horaFin, claseIdIgnorar)
 }

@@ -4,7 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nico.gestorclases.data.model.Alumno
 import com.nico.gestorclases.data.model.Clase
-import com.nico.gestorclases.data.model.ClaseConAlumno
+import com.nico.gestorclases.data.model.ClaseAlumnoCrossRef
+import com.nico.gestorclases.data.model.ClaseConAlumnos
 import com.nico.gestorclases.data.model.EstadoClase
 import com.nico.gestorclases.data.model.EstadoPago
 import com.nico.gestorclases.data.repository.AlumnoRepository
@@ -22,7 +23,8 @@ import java.time.YearMonth
 data class AlumnoConDeuda(
     val alumno: Alumno,
     val montoPendiente: Double,
-    val cantidadClases: Int
+    val cantidadClases: Int,
+    val clases: List<ClaseConAlumnos>
 )
 
 data class CierreDelMesInfo(
@@ -53,11 +55,11 @@ class CalendarViewModel(
         alumnoRepository.todosLosAlumnos
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val clasesDelMes: StateFlow<List<ClaseConAlumno>> = _mesActual.flatMapLatest { mes ->
+    val clasesDelMes: StateFlow<List<ClaseConAlumnos>> = _mesActual.flatMapLatest { mes ->
         claseRepository.getClasesDelMes(mes.toStartMillis(), mes.toEndMillis())
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val clasesDelDia: StateFlow<List<ClaseConAlumno>> = combine(
+    val clasesDelDia: StateFlow<List<ClaseConAlumnos>> = combine(
         _fechaSeleccionada,
         clasesDelMes
     ) { fecha, clases ->
@@ -73,6 +75,8 @@ class CalendarViewModel(
         calcularCierre(clases)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    // ────────────────────────── Navegación ──────────────────────────
+
     fun irMesAnterior() {
         _mesActual.value = _mesActual.value.minusMonths(1)
     }
@@ -83,26 +87,64 @@ class CalendarViewModel(
 
     fun seleccionarFecha(fecha: LocalDate) {
         _fechaSeleccionada.value = fecha
-        // Si la fecha es de un mes diferente, navegar a ese mes
         val nuevoMes = YearMonth.of(fecha.year, fecha.month)
         if (nuevoMes != _mesActual.value) {
             _mesActual.value = nuevoMes
         }
     }
 
-    fun agregarClase(clase: Clase) = viewModelScope.launch {
-        claseRepository.insertarClase(clase)
+    // ────────────────────────── CRUD de Clases ──────────────────────────
+
+    /**
+     * Crea una clase nueva con sus participantes en una transacción atómica.
+     */
+    fun agregarClase(clase: Clase, crossRefs: List<ClaseAlumnoCrossRef>) = viewModelScope.launch {
+        claseRepository.insertarClaseConAlumnos(clase, crossRefs)
     }
 
+    /**
+     * Actualiza solo el evento de la clase (horas, estado, notas).
+     * Útil para "Marcar como Dada" o cambiar el estado del evento.
+     */
     fun actualizarClase(clase: Clase) = viewModelScope.launch {
         claseRepository.actualizarClase(clase)
+    }
+
+    /**
+     * Actualiza la clase completa: evento + lista de participantes.
+     */
+    fun actualizarClaseConAlumnos(clase: Clase, crossRefs: List<ClaseAlumnoCrossRef>) =
+        viewModelScope.launch {
+            claseRepository.actualizarClaseConAlumnos(clase, crossRefs)
+        }
+
+    /**
+     * Marca el pago de un alumno específico en una clase grupal.
+     */
+    fun marcarPagado(crossRef: ClaseAlumnoCrossRef) = viewModelScope.launch {
+        claseRepository.actualizarParticipante(crossRef.copy(estadoPago = EstadoPago.PAGADA))
     }
 
     fun eliminarClase(clase: Clase) = viewModelScope.launch {
         claseRepository.eliminarClase(clase)
     }
 
-    private fun calcularCierre(clases: List<ClaseConAlumno>): CierreDelMesInfo? {
+    // ────────────────────────── Validación ──────────────────────────
+
+    /**
+     * Retorna true si el horario propuesto entra en conflicto con clases existentes.
+     * Se evalúa en el hilo de IO mediante una coroutine.
+     */
+    suspend fun validarSolapamiento(
+        fecha: Long,
+        horaInicio: String,
+        horaFin: String,
+        claseIdIgnorar: Int = 0
+    ): Boolean = claseRepository.haySolapamientoDeHorario(fecha, horaInicio, horaFin, claseIdIgnorar)
+
+    // ────────────────────────── Cierre del Mes ──────────────────────────
+
+    private fun calcularCierre(clases: List<ClaseConAlumnos>): CierreDelMesInfo? {
         if (clases.isEmpty()) return null
 
         val reservadas = clases.count { it.clase.estadoClase == EstadoClase.RESERVADA }
@@ -110,30 +152,46 @@ class CalendarViewModel(
         val canceladasConTiempo = clases.count { it.clase.estadoClase == EstadoClase.CANCELADA_CON_TIEMPO }
         val canceladasMismoDia = clases.count { it.clase.estadoClase == EstadoClase.CANCELADA_MISMO_DIA }
 
-        // Las facturables son DADAS y CANCELADAS_MISMO_DIA (el alumno paga igual)
+        // Las facturables son DADAS y CANCELADAS_MISMO_DIA
         val facturables = clases.filter {
             it.clase.estadoClase == EstadoClase.DADA ||
                     it.clase.estadoClase == EstadoClase.CANCELADA_MISMO_DIA
         }
 
-        val montoTotal = facturables.sumOf { it.clase.precioClase }
-        val montoCobrado = facturables
-            .filter { it.clase.estadoPago == EstadoPago.PAGADA }
-            .sumOf { it.clase.precioClase }
+        val montoTotal = facturables.sumOf { it.precioTotal }
+        val montoCobrado = facturables.sumOf { clase ->
+            clase.participantes
+                .filter { it.estadoPago == EstadoPago.PAGADA }
+                .sumOf { it.precioIndividual }
+        }
         val montoPendiente = montoTotal - montoCobrado
 
-        // Agrupar deudores por alumno
-        val deudores = facturables
-            .filter { it.clase.estadoPago == EstadoPago.PENDIENTE }
-            .groupBy { it.alumno }
-            .map { (alumno, clasesDeudoras) ->
-                AlumnoConDeuda(
-                    alumno = alumno,
-                    montoPendiente = clasesDeudoras.sumOf { it.clase.precioClase },
-                    cantidadClases = clasesDeudoras.size
-                )
+        // Deudores: agrupar por alumno, considerando clases grupales
+        val deudoresPorAlumno = mutableMapOf<Alumno, MutableList<ClaseConAlumnos>>()
+        facturables.forEach { claseConAlumnos ->
+            claseConAlumnos.participantes
+                .filter { it.estadoPago == EstadoPago.PENDIENTE }
+                .forEach { crossRef ->
+                    val alumno = claseConAlumnos.alumnos.find { it.id == crossRef.alumnoId }
+                    if (alumno != null) {
+                        deudoresPorAlumno.getOrPut(alumno) { mutableListOf() }.add(claseConAlumnos)
+                    }
+                }
+        }
+
+        val deudores = deudoresPorAlumno.map { (alumno, clasesDeudoras) ->
+            val montoPendienteAlumno = clasesDeudoras.sumOf { clase ->
+                clase.participantes
+                    .filter { it.alumnoId == alumno.id && it.estadoPago == EstadoPago.PENDIENTE }
+                    .sumOf { it.precioIndividual }
             }
-            .sortedByDescending { it.montoPendiente }
+            AlumnoConDeuda(
+                alumno = alumno,
+                montoPendiente = montoPendienteAlumno,
+                cantidadClases = clasesDeudoras.size,
+                clases = clasesDeudoras
+            )
+        }.sortedByDescending { it.montoPendiente }
 
         return CierreDelMesInfo(
             mesAnio = _mesActual.value.toString(),
