@@ -24,6 +24,8 @@ import com.nico.gestorclases.viewmodel.CalendarViewModel
 import com.nico.gestorclases.viewmodel.HomeViewModel
 import com.nico.gestorclases.viewmodel.StudentsViewModel
 
+import com.nico.gestorclases.viewmodel.AuthViewModel
+
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
@@ -36,6 +38,7 @@ fun AppNavigation() {
     val homeViewModel: HomeViewModel = viewModel(factory = factory)
     val calendarViewModel: CalendarViewModel = viewModel(factory = factory)
     val studentsViewModel: StudentsViewModel = viewModel(factory = factory)
+    val authViewModel: AuthViewModel = viewModel(factory = factory)
 
     // Rutas donde se muestra el BottomBar
     val bottomBarRoutes = BottomNavItem.items.map { it.route }
@@ -79,32 +82,48 @@ fun AppNavigation() {
             startDestination = BottomNavItem.Hoy.route,
             modifier = Modifier.padding(innerPadding),
             enterTransition = {
-                slideIntoContainer(
-                    AnimatedContentTransitionScope.SlideDirection.Start,
-                    tween(300)
-                )
+                val initialIndex = BottomNavItem.items.indexOfFirst { it.route == initialState.destination.route }
+                val targetIndex = BottomNavItem.items.indexOfFirst { it.route == targetState.destination.route }
+                val direction = if (initialIndex != -1 && targetIndex != -1 && targetIndex < initialIndex) {
+                    AnimatedContentTransitionScope.SlideDirection.End
+                } else {
+                    AnimatedContentTransitionScope.SlideDirection.Start
+                }
+                slideIntoContainer(direction, tween(300))
             },
             exitTransition = {
-                slideOutOfContainer(
-                    AnimatedContentTransitionScope.SlideDirection.Start,
-                    tween(300)
-                )
+                val initialIndex = BottomNavItem.items.indexOfFirst { it.route == initialState.destination.route }
+                val targetIndex = BottomNavItem.items.indexOfFirst { it.route == targetState.destination.route }
+                val direction = if (initialIndex != -1 && targetIndex != -1 && targetIndex < initialIndex) {
+                    AnimatedContentTransitionScope.SlideDirection.End
+                } else {
+                    AnimatedContentTransitionScope.SlideDirection.Start
+                }
+                slideOutOfContainer(direction, tween(300))
             },
             popEnterTransition = {
-                slideIntoContainer(
-                    AnimatedContentTransitionScope.SlideDirection.End,
-                    tween(300)
-                )
+                val initialIndex = BottomNavItem.items.indexOfFirst { it.route == initialState.destination.route }
+                val targetIndex = BottomNavItem.items.indexOfFirst { it.route == targetState.destination.route }
+                val direction = if (initialIndex != -1 && targetIndex != -1 && targetIndex < initialIndex) {
+                    AnimatedContentTransitionScope.SlideDirection.End
+                } else {
+                    AnimatedContentTransitionScope.SlideDirection.Start
+                }
+                slideIntoContainer(direction, tween(300))
             },
             popExitTransition = {
-                slideOutOfContainer(
-                    AnimatedContentTransitionScope.SlideDirection.End,
-                    tween(300)
-                )
+                val initialIndex = BottomNavItem.items.indexOfFirst { it.route == initialState.destination.route }
+                val targetIndex = BottomNavItem.items.indexOfFirst { it.route == targetState.destination.route }
+                val direction = if (initialIndex != -1 && targetIndex != -1 && targetIndex < initialIndex) {
+                    AnimatedContentTransitionScope.SlideDirection.End
+                } else {
+                    AnimatedContentTransitionScope.SlideDirection.Start
+                }
+                slideOutOfContainer(direction, tween(300))
             }
         ) {
             composable(BottomNavItem.Hoy.route) {
-                HomeScreen(viewModel = homeViewModel)
+                HomeScreen(viewModel = homeViewModel, authViewModel = authViewModel)
             }
             composable(BottomNavItem.Calendario.route) {
                 CalendarScreen(viewModel = calendarViewModel)

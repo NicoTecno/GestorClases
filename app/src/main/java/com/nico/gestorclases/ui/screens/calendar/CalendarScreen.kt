@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.Functions
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -53,13 +54,27 @@ fun CalendarScreen(viewModel: CalendarViewModel) {
             TopAppBar(
                 title = { Text("Calendario", fontWeight = FontWeight.Bold) },
                 actions = {
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val clasesActualesDelMes by viewModel.clasesDelMes.collectAsState()
+                    
+                    IconButton(
+                        onClick = {
+                            com.nico.gestorclases.utils.ExcelExportService.exportMonthToExcel(
+                                context,
+                                clasesActualesDelMes,
+                                viewModel.mesActual.value.toString()
+                            )
+                        }
+                    ) {
+                        Icon(Icons.Filled.Share, contentDescription = "Exportar a Excel")
+                    }
                     Button(
                         onClick = { mostrarCierre = true },
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
                         Icon(Icons.Filled.Functions, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Cierre de mes")
+                        Text("Cierre")
                     }
                 }
             )

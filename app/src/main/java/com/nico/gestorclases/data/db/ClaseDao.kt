@@ -43,6 +43,12 @@ interface ClaseDao {
     @Query("SELECT * FROM clases WHERE fecha = :fecha")
     suspend fun getClasesDelDiaSuspend(fecha: Long): List<Clase>
 
+    @Query("SELECT * FROM clases")
+    fun getAllClases(): Flow<List<Clase>>
+
+    @Query("SELECT * FROM clase_alumno_cross_ref")
+    fun getAllCrossRefs(): Flow<List<ClaseAlumnoCrossRef>>
+
     // ───────────────────────────── Inserts y Updates ────────────────────────────
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
