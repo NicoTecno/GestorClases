@@ -89,6 +89,8 @@ fun AddEditClaseDialog(
     var mostrarDeleteConfirm by remember { mutableStateOf(false) }
     var errorSolapamiento by remember { mutableStateOf(false) }
     var errorHorario by remember { mutableStateOf(false) }
+    // En edición, la hora fin ya está fijada por el usuario anteriormente.
+    var horaFinModificada by remember { mutableStateOf(esEdicion) }
 
     // ── Helpers de slots ──────────────────────────────────────────────────────
 
@@ -149,6 +151,11 @@ fun AddEditClaseDialog(
             onDismissRequest = { mostrarTimePickerInicio = false },
             onConfirm = { h, m ->
                 horaInicio = "${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}"
+                // Si el usuario nunca tocó la hora fin, la ponemos 1 hora después
+                if (!horaFinModificada) {
+                    val finH = (h + 1) % 24
+                    horaFin = "${finH.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}"
+                }
                 mostrarTimePickerInicio = false
                 resetErrores()
             }
@@ -163,6 +170,7 @@ fun AddEditClaseDialog(
             onDismissRequest = { mostrarTimePickerFin = false },
             onConfirm = { h, m ->
                 horaFin = "${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}"
+                horaFinModificada = true  // Marca que el usuario la fijó manualmente
                 mostrarTimePickerFin = false
                 resetErrores()
             }
