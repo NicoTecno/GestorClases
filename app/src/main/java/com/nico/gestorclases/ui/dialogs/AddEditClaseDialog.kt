@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.nico.gestorclases.data.model.*
+import com.nico.gestorclases.ui.components.WheelTimePickerDialog
 import com.nico.gestorclases.utils.DateUtils.toMinutes
 import com.nico.gestorclases.utils.DateUtils.toStartOfDayMillis
 import kotlinx.coroutines.launch
@@ -142,46 +143,30 @@ fun AddEditClaseDialog(
 
     if (mostrarTimePickerInicio) {
         val parts = horaInicio.split(":")
-        val timeState = rememberTimePickerState(
+        WheelTimePickerDialog(
             initialHour = parts.getOrNull(0)?.toIntOrNull() ?: 9,
             initialMinute = parts.getOrNull(1)?.toIntOrNull() ?: 0,
-            is24Hour = true
-        )
-        TimePickerDialog(
             onDismissRequest = { mostrarTimePickerInicio = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    horaInicio = "${timeState.hour.toString().padStart(2, '0')}:${timeState.minute.toString().padStart(2, '0')}"
-                    mostrarTimePickerInicio = false
-                    resetErrores()
-                }) { Text("Confirmar") }
-            },
-            dismissButton = {
-                TextButton(onClick = { mostrarTimePickerInicio = false }) { Text("Cancelar") }
+            onConfirm = { h, m ->
+                horaInicio = "${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}"
+                mostrarTimePickerInicio = false
+                resetErrores()
             }
-        ) { TimePicker(state = timeState) }
+        )
     }
 
     if (mostrarTimePickerFin) {
         val parts = horaFin.split(":")
-        val timeState = rememberTimePickerState(
+        WheelTimePickerDialog(
             initialHour = parts.getOrNull(0)?.toIntOrNull() ?: 10,
             initialMinute = parts.getOrNull(1)?.toIntOrNull() ?: 0,
-            is24Hour = true
-        )
-        TimePickerDialog(
             onDismissRequest = { mostrarTimePickerFin = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    horaFin = "${timeState.hour.toString().padStart(2, '0')}:${timeState.minute.toString().padStart(2, '0')}"
-                    mostrarTimePickerFin = false
-                    resetErrores()
-                }) { Text("Confirmar") }
-            },
-            dismissButton = {
-                TextButton(onClick = { mostrarTimePickerFin = false }) { Text("Cancelar") }
+            onConfirm = { h, m ->
+                horaFin = "${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}"
+                mostrarTimePickerFin = false
+                resetErrores()
             }
-        ) { TimePicker(state = timeState) }
+        )
     }
 
     if (mostrarDeleteConfirm) {
