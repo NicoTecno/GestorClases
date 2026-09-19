@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -111,75 +112,81 @@ fun CalendarScreen(viewModel: CalendarViewModel) {
             }
         }
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
+                .padding(padding),
+            contentPadding = PaddingValues(bottom = 88.dp)
         ) {
             // ── Cabecera de navegación del mes ────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = { viewModel.irMesAnterior() }) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Mes anterior")
-                }
-                Text(
-                    text = mesActual.toDisplayString(),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                IconButton(onClick = { viewModel.irMesSiguiente() }) {
-                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Mes siguiente")
+            item(key = "header") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { viewModel.irMesAnterior() }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Mes anterior")
+                    }
+                    Text(
+                        text = mesActual.toDisplayString(),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    IconButton(onClick = { viewModel.irMesSiguiente() }) {
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Mes siguiente")
+                    }
                 }
             }
 
-            CustomCalendar(
-                mesActual = mesActual,
-                fechaSeleccionada = fechaSeleccionada,
-                diasConClases = diasConClases,
-                onDateSelected = { viewModel.seleccionarFecha(it) }
-            )
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-            Text(
-                text = "Clases del ${fechaSeleccionada.dayOfMonth}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            )
-
-            if (clasesDelDia.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Filled.EventBusy,
-                    title = "Día libre",
-                    subtitle = "No hay clases registradas para esta fecha.",
-                    modifier = Modifier.weight(1f)
+            // ── Calendario ────────────────────────────────────────────────────
+            item(key = "calendar") {
+                CustomCalendar(
+                    mesActual = mesActual,
+                    fechaSeleccionada = fechaSeleccionada,
+                    diasConClases = diasConClases,
+                    onDateSelected = { viewModel.seleccionarFecha(it) }
                 )
+                HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
+            }
+
+            // ── Título de clases del día ──────────────────────────────────────
+            item(key = "title") {
+                Text(
+                    text = "Clases del ${fechaSeleccionada.dayOfMonth}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                )
+            }
+
+            // ── Clases del día ────────────────────────────────────────────────
+            if (clasesDelDia.isEmpty()) {
+                item(key = "empty") {
+                    EmptyState(
+                        icon = Icons.Filled.EventBusy,
+                        title = "Día libre",
+                        subtitle = "No hay clases registradas para esta fecha.",
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(clasesDelDia, key = { it.clase.id }) { claseConAlumnos ->
-                        ClaseCard(
-                            claseConAlumnos = claseConAlumnos,
-                            onEdit = { claseAEditar = claseConAlumnos },
-                            onMarkDada = {
-                                viewModel.actualizarClase(
-                                    claseConAlumnos.clase.copy(estadoClase = EstadoClase.DADA)
-                                )
-                            },
-                            onMarkPagado = { crossRef ->
-                                viewModel.marcarPagado(crossRef)
-                            }
-                        )
-                    }
+                items(clasesDelDia, key = { it.clase.id }) { claseConAlumnos ->
+                    ClaseCard(
+                        claseConAlumnos = claseConAlumnos,
+                        onEdit = { claseAEditar = claseConAlumnos },
+                        onMarkDada = {
+                            viewModel.actualizarClase(
+                                claseConAlumnos.clase.copy(estadoClase = EstadoClase.DADA)
+                            )
+                        },
+                        onMarkPagado = { crossRef ->
+                            viewModel.marcarPagado(crossRef)
+                        },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                    )
                 }
             }
         }
