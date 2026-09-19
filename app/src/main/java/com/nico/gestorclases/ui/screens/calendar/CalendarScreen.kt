@@ -1,5 +1,6 @@
 package com.nico.gestorclases.ui.screens.calendar
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -12,15 +13,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.Functions
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -31,17 +33,23 @@ import com.nico.gestorclases.ui.components.EmptyState
 import com.nico.gestorclases.ui.dialogs.AddEditClaseDialog
 import com.nico.gestorclases.ui.dialogs.CierreDelMesDialog
 import com.nico.gestorclases.utils.DateUtils.toDisplayString
+import com.nico.gestorclases.utils.ExcelExportService
 import com.nico.gestorclases.viewmodel.CalendarViewModel
 import java.time.LocalDate
 import java.time.YearMonth
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(viewModel: CalendarViewModel) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
     val mesActual by viewModel.mesActual.collectAsState()
     val fechaSeleccionada by viewModel.fechaSeleccionada.collectAsState()
     val diasConClases by viewModel.diasConClases.collectAsState()
     val clasesDelDia by viewModel.clasesDelDia.collectAsState()
+    val clasesDelMes by viewModel.clasesDelMes.collectAsState()
     val cierreInfo by viewModel.cierreDelMes.collectAsState()
     val alumnos by viewModel.todosLosAlumnos.collectAsState()
 
@@ -54,25 +62,40 @@ fun CalendarScreen(viewModel: CalendarViewModel) {
             TopAppBar(
                 title = { Text("Calendario", fontWeight = FontWeight.Bold) },
                 actions = {
-                    val context = androidx.compose.ui.platform.LocalContext.current
-                    val clasesActualesDelMes by viewModel.clasesDelMes.collectAsState()
-                    
+                    // Botón exportar Excel — el I/O pesado corre en Dispatchers.IO dentro
+                    // de generarArchivoExcel; compartirArchivo vuelve al Main dispatcher.
                     IconButton(
                         onClick = {
-                            com.nico.gestorclases.utils.ExcelExportService.exportMonthToExcel(
-                                context,
-                                clasesActualesDelMes,
-                                viewModel.mesActual.value.toString()
-                            )
+                            coroutineScope.launch {
+                                try {
+                                    val file = ExcelExportService.generarArchivoExcel(
+                                        context = context,
+                                        clasesDelMes = clasesDelMes,
+                                        mesAnio = mesActual.toString()
+                                    )
+                                    ExcelExportService.compartirArchivo(context, file)
+                                } catch (e: Exception) {
+                                    Toast.makeText(
+                                        context,
+                                        "Error al generar Excel: ${e.message}",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                }
+                            }
                         }
                     ) {
-                        Icon(Icons.Filled.Share, contentDescription = "Exportar a Excel")
+                        // Ícono cambiado de Share a Description para comunicar "exportar documento"
+                        Icon(Icons.Filled.Description, contentDescription = "Exportar a Excel")
                     }
                     Button(
                         onClick = { mostrarCierre = true },
                         modifier = Modifier.padding(end = 8.dp)
                     ) {
-                        Icon(Icons.Filled.Functions, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(
+                            Icons.Filled.Functions,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
                         Spacer(Modifier.width(4.dp))
                         Text("Cierre")
                     }
@@ -93,7 +116,7 @@ fun CalendarScreen(viewModel: CalendarViewModel) {
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Cabecera del mes
+            // ── Cabecera de navegación del mes ────────────────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -162,6 +185,8 @@ fun CalendarScreen(viewModel: CalendarViewModel) {
         }
     }
 
+    // ── Diálogos (fuera del Scaffold para mantener consistencia) ──────────────
+
     if (mostrarCierre && cierreInfo != null) {
         CierreDelMesDialog(
             info = cierreInfo!!,
@@ -204,6 +229,8 @@ fun CalendarScreen(viewModel: CalendarViewModel) {
         )
     }
 }
+
+// ── Calendario personalizado ──────────────────────────────────────────────────
 
 @Composable
 fun CustomCalendar(

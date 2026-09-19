@@ -7,12 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.nico.gestorclases.data.model.*
+import com.nico.gestorclases.utils.DateUtils.toMinutes
 import com.nico.gestorclases.utils.DateUtils.toStartOfDayMillis
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -36,6 +32,14 @@ data class ResultadoClaseDialog(
 
 /**
  * Diálogo para crear o editar una clase (individual o grupal).
+ *
+ * Está descompuesto en sub-composables para mantener la legibilidad:
+ * - [AlumnosSelectorSection]: slots de selección de alumnos (solo en creación).
+ * - [PreciosPagosSection]: precios y estados de pago por alumno.
+ * - [FechaSelectorField]: campo de fecha con DatePicker.
+ * - [HorarioSelectorRow]: fila de inicio/fin con TimePicker.
+ * - [EstadoClaseSection]: selector de estado (solo en edición).
+ * - [ErroresHorarioSection]: mensajes de error de validación.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,42 +54,25 @@ fun AddEditClaseDialog(
 ) {
     val esEdicion = claseConAlumnos != null
     val clase = claseConAlumnos?.clase
-
     val coroutineScope = rememberCoroutineScope()
 
-    // ─── Estado del formulario ────────────────────────────────────────────────
+    // ── Estado del formulario ─────────────────────────────────────────────────
 
-    // Slots de alumnos: en edición partimos de los alumnos actuales,
-    // en creación arrancamos con 1 slot vacío.
     var slotsAlumnos by remember {
         mutableStateOf(
             if (esEdicion) claseConAlumnos!!.alumnos.toList() else listOf<Alumno?>(null)
         )
     }
-
-    // Precios individuales: alumnoId → precio como String editable
     var preciosPorAlumno by remember {
         mutableStateOf(
-            if (esEdicion) {
-                claseConAlumnos!!.participantes.associate { ref ->
-                    ref.alumnoId to ref.precioIndividual.toString()
-                }
-            } else {
-                emptyMap<Int, String>()
-            }
+            if (esEdicion) claseConAlumnos!!.participantes.associate { it.alumnoId to it.precioIndividual.toString() }
+            else emptyMap<Int, String>()
         )
     }
-
-    // Estados de pago individuales (solo en edición; en creación todos arrancan PENDIENTE)
     var estadosPagoPorAlumno by remember {
         mutableStateOf(
-            if (esEdicion) {
-                claseConAlumnos!!.participantes.associate { ref ->
-                    ref.alumnoId to ref.estadoPago
-                }
-            } else {
-                emptyMap<Int, EstadoPago>()
-            }
+            if (esEdicion) claseConAlumnos!!.participantes.associate { it.alumnoId to it.estadoPago }
+            else emptyMap<Int, EstadoPago>()
         )
     }
 
@@ -95,51 +82,41 @@ fun AddEditClaseDialog(
     var estadoClase by remember { mutableStateOf(clase?.estadoClase ?: EstadoClase.RESERVADA) }
     var notas by remember { mutableStateOf(clase?.notas ?: "") }
 
-    // UI
     var mostrarDatePicker by remember { mutableStateOf(false) }
     var mostrarTimePickerInicio by remember { mutableStateOf(false) }
     var mostrarTimePickerFin by remember { mutableStateOf(false) }
     var mostrarDeleteConfirm by remember { mutableStateOf(false) }
     var errorSolapamiento by remember { mutableStateOf(false) }
-    var errorHorario by remember { mutableStateOf(false) } // fin <= inicio
+    var errorHorario by remember { mutableStateOf(false) }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────
+    // ── Helpers de slots ──────────────────────────────────────────────────────
 
-    fun resetearErrores() {
-        errorSolapamiento = false
-        errorHorario = false
-    }
+    fun resetErrores() { errorSolapamiento = false; errorHorario = false }
 
     fun updateSlot(index: Int, nuevoAlumno: Alumno) {
         val oldAlumno = slotsAlumnos[index]
-        val nuevaLista = slotsAlumnos.toMutableList()
-        nuevaLista[index] = nuevoAlumno
+        val nuevaLista = slotsAlumnos.toMutableList().also { it[index] = nuevoAlumno }
         slotsAlumnos = nuevaLista
-        
-        // Limpiar precio del alumno viejo si ya no está en la lista
         if (oldAlumno != null && oldAlumno != nuevoAlumno && !nuevaLista.contains(oldAlumno)) {
-             preciosPorAlumno = preciosPorAlumno - oldAlumno.id
-             estadosPagoPorAlumno = estadosPagoPorAlumno - oldAlumno.id
+            preciosPorAlumno = preciosPorAlumno - oldAlumno.id
+            estadosPagoPorAlumno = estadosPagoPorAlumno - oldAlumno.id
         }
-        // Asignar precio por defecto al nuevo
         if (!preciosPorAlumno.containsKey(nuevoAlumno.id)) {
-             preciosPorAlumno = preciosPorAlumno + (nuevoAlumno.id to nuevoAlumno.precioPorDefecto.toString())
-        }
-    }
-    
-    fun removeSlot(index: Int) {
-        val oldAlumno = slotsAlumnos[index]
-        val nuevaLista = slotsAlumnos.toMutableList()
-        nuevaLista.removeAt(index)
-        slotsAlumnos = nuevaLista
-        
-        if (oldAlumno != null && !nuevaLista.contains(oldAlumno)) {
-             preciosPorAlumno = preciosPorAlumno - oldAlumno.id
-             estadosPagoPorAlumno = estadosPagoPorAlumno - oldAlumno.id
+            preciosPorAlumno = preciosPorAlumno + (nuevoAlumno.id to nuevoAlumno.precioPorDefecto.toString())
         }
     }
 
-    // ─── Pickers ─────────────────────────────────────────────────────────────
+    fun removeSlot(index: Int) {
+        val oldAlumno = slotsAlumnos[index]
+        val nuevaLista = slotsAlumnos.toMutableList().also { it.removeAt(index) }
+        slotsAlumnos = nuevaLista
+        if (oldAlumno != null && !nuevaLista.contains(oldAlumno)) {
+            preciosPorAlumno = preciosPorAlumno - oldAlumno.id
+            estadosPagoPorAlumno = estadosPagoPorAlumno - oldAlumno.id
+        }
+    }
+
+    // ── Pickers de fecha y hora ───────────────────────────────────────────────
 
     if (mostrarDatePicker) {
         val datePickerState = rememberDatePickerState(
@@ -154,7 +131,7 @@ fun AddEditClaseDialog(
                             .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
                     }
                     mostrarDatePicker = false
-                    resetearErrores()
+                    resetErrores()
                 }) { Text("Confirmar") }
             },
             dismissButton = {
@@ -176,7 +153,7 @@ fun AddEditClaseDialog(
                 TextButton(onClick = {
                     horaInicio = "${timeState.hour.toString().padStart(2, '0')}:${timeState.minute.toString().padStart(2, '0')}"
                     mostrarTimePickerInicio = false
-                    resetearErrores()
+                    resetErrores()
                 }) { Text("Confirmar") }
             },
             dismissButton = {
@@ -198,7 +175,7 @@ fun AddEditClaseDialog(
                 TextButton(onClick = {
                     horaFin = "${timeState.hour.toString().padStart(2, '0')}:${timeState.minute.toString().padStart(2, '0')}"
                     mostrarTimePickerFin = false
-                    resetearErrores()
+                    resetErrores()
                 }) { Text("Confirmar") }
             },
             dismissButton = {
@@ -224,25 +201,18 @@ fun AddEditClaseDialog(
         )
     }
 
-    // ─── Diálogo principal ────────────────────────────────────────────────────
+    // ── Diálogo principal ─────────────────────────────────────────────────────
 
     val alumnosFinales = slotsAlumnos.filterNotNull().distinct()
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(if (esEdicion) "Editar clase" else "Nueva clase")
-                if (esEdicion && onDelete != null) {
-                    IconButton(onClick = { mostrarDeleteConfirm = true }) {
-                        Icon(Icons.Filled.Delete, "Eliminar", tint = MaterialTheme.colorScheme.error)
-                    }
-                }
-            }
+            DialogTitleRow(
+                esEdicion = esEdicion,
+                onDelete = onDelete,
+                onShowDeleteConfirm = { mostrarDeleteConfirm = true }
+            )
         },
         text = {
             Column(
@@ -251,204 +221,54 @@ fun AddEditClaseDialog(
                     .padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
+                AlumnosSelectorSection(
+                    esEdicion = esEdicion,
+                    alumnos = alumnos,
+                    slotsAlumnos = slotsAlumnos,
+                    alumnosFinales = alumnosFinales,
+                    onUpdateSlot = { index, alumno -> updateSlot(index, alumno) },
+                    onRemoveSlot = { index -> removeSlot(index) },
+                    onAddSlot = { slotsAlumnos = slotsAlumnos + null }
+                )
 
-                // ── Selector de alumnos ──────────────────────────────────────
-                Text("Alumnos", style = MaterialTheme.typography.labelLarge)
+                PreciosPagosSection(
+                    esEdicion = esEdicion,
+                    alumnosFinales = alumnosFinales,
+                    preciosPorAlumno = preciosPorAlumno,
+                    estadosPagoPorAlumno = estadosPagoPorAlumno,
+                    onPrecioChange = { alumnoId, valor ->
+                        preciosPorAlumno = preciosPorAlumno + (alumnoId to valor)
+                    },
+                    onEstadoPagoChange = { alumnoId, estado ->
+                        estadosPagoPorAlumno = estadosPagoPorAlumno + (alumnoId to estado)
+                    }
+                )
 
-                if (alumnos.isEmpty()) {
-                    Text(
-                        "No hay alumnos creados. Creá un alumno primero.",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                } else if (esEdicion) {
-                    Text(
-                        text = alumnosFinales.joinToString(", ") { it.nombreCompleto },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        slotsAlumnos.forEachIndexed { index, selected ->
-                            SearchableAlumnoDropdown(
-                                alumnos = alumnos,
-                                selectedAlumno = selected,
-                                onAlumnoSelected = { updateSlot(index, it) },
-                                onRemove = if (slotsAlumnos.size > 1) { { removeSlot(index) } } else null
-                            )
-                        }
-                        TextButton(onClick = { slotsAlumnos = slotsAlumnos + null }) {
-                            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Agregar otro alumno")
-                        }
-                    }
-                    if (alumnosFinales.isEmpty()) {
-                        Text(
-                            "Seleccioná al menos un alumno.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
+                FechaSelectorField(
+                    fechaSeleccionada = fechaSeleccionada,
+                    onClickFecha = { mostrarDatePicker = true }
+                )
 
-                // ── Precios y pagos ──────────────────────────────────────────
-                if (alumnosFinales.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            if (esEdicion) "Precios y estado de pago" else "Precio por alumno",
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        alumnosFinales.forEach { alumno ->
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        text = alumno.nombre,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    OutlinedTextField(
-                                        value = preciosPorAlumno[alumno.id] ?: "0",
-                                        onValueChange = { nuevoValor ->
-                                            preciosPorAlumno = preciosPorAlumno + (alumno.id to nuevoValor)
-                                        },
-                                        label = { Text("Precio") },
-                                        modifier = Modifier.width(130.dp),
-                                        singleLine = true,
-                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                                        prefix = { Text("$") }
-                                    )
-                                }
-                                if (esEdicion) {
-                                    val estadoPago = estadosPagoPorAlumno[alumno.id] ?: EstadoPago.PENDIENTE
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Spacer(modifier = Modifier.weight(1f))
-                                        EstadoPago.entries.forEach { ep ->
-                                            FilterChip(
-                                                selected = estadoPago == ep,
-                                                onClick = {
-                                                    estadosPagoPorAlumno = estadosPagoPorAlumno + (alumno.id to ep)
-                                                },
-                                                label = { Text(ep.displayName) }
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                HorarioSelectorRow(
+                    horaInicio = horaInicio,
+                    horaFin = horaFin,
+                    tieneError = errorSolapamiento || errorHorario,
+                    onClickInicio = { mostrarTimePickerInicio = true },
+                    onClickFin = { mostrarTimePickerFin = true }
+                )
 
-                // ── Fecha ─────────────────────────────────────────────────────
-                Box(modifier = Modifier.clickable { mostrarDatePicker = true }) {
-                    OutlinedTextField(
-                        value = "${fechaSeleccionada.dayOfMonth}/${fechaSeleccionada.monthValue}/${fechaSeleccionada.year}",
-                        onValueChange = {},
-                        readOnly = true,
-                        enabled = false, // Lo desactivamos para que el click pase al Box
-                        label = { Text("Fecha") },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                            disabledBorderColor = MaterialTheme.colorScheme.outline,
-                            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        trailingIcon = {
-                            Icon(Icons.Filled.CalendarToday, contentDescription = "Cambiar fecha")
-                        }
-                    )
-                }
+                ErroresHorarioSection(
+                    errorHorario = errorHorario,
+                    errorSolapamiento = errorSolapamiento
+                )
 
-                // ── Horario ───────────────────────────────────────────────────
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(modifier = Modifier.weight(1f).clickable { mostrarTimePickerInicio = true }) {
-                        OutlinedTextField(
-                            value = horaInicio,
-                            onValueChange = {},
-                            readOnly = true,
-                            enabled = false,
-                            label = { Text("Inicio") },
-                            modifier = Modifier.fillMaxWidth(),
-                            isError = errorSolapamiento || errorHorario,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                                disabledBorderColor = if (errorSolapamiento || errorHorario) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
-                                disabledLabelColor = if (errorSolapamiento || errorHorario) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            ),
-                            trailingIcon = {
-                                Icon(Icons.Filled.AccessTime, contentDescription = "Cambiar inicio")
-                            }
-                        )
-                    }
-                    Box(modifier = Modifier.weight(1f).clickable { mostrarTimePickerFin = true }) {
-                        OutlinedTextField(
-                            value = horaFin,
-                            onValueChange = {},
-                            readOnly = true,
-                            enabled = false,
-                            label = { Text("Fin") },
-                            modifier = Modifier.fillMaxWidth(),
-                            isError = errorSolapamiento || errorHorario,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                                disabledBorderColor = if (errorSolapamiento || errorHorario) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
-                                disabledLabelColor = if (errorSolapamiento || errorHorario) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            ),
-                            trailingIcon = {
-                                Icon(Icons.Filled.AccessTime, contentDescription = "Cambiar fin")
-                            }
-                        )
-                    }
-                }
-
-                AnimatedVisibility(visible = errorHorario) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
-                        Text("La hora de fin debe ser posterior al inicio.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                AnimatedVisibility(visible = errorSolapamiento) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
-                        Text("Ya existe una clase en ese horario.", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-
-                // ── Estado (solo en edición) ──────────────────────
                 if (esEdicion) {
-                    Text("Estado de la clase", style = MaterialTheme.typography.labelLarge)
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        EstadoClase.entries.forEach { estado ->
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                RadioButton(selected = estadoClase == estado, onClick = { estadoClase = estado })
-                                Text(estado.displayName, style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                    }
+                    EstadoClaseSection(
+                        estadoClase = estadoClase,
+                        onEstadoChange = { estadoClase = it }
+                    )
                 }
 
-                // ── Notas ─────────────────────────────────────────────────────
                 OutlinedTextField(
                     value = notas,
                     onValueChange = { notas = it },
@@ -464,11 +284,8 @@ fun AddEditClaseDialog(
                 onClick = {
                     if (alumnosFinales.isEmpty()) return@Button
 
-                    fun toMin(h: String): Int {
-                        val p = h.split(":")
-                        return (p.getOrNull(0)?.toIntOrNull() ?: 0) * 60 + (p.getOrNull(1)?.toIntOrNull() ?: 0)
-                    }
-                    if (toMin(horaFin) <= toMin(horaInicio)) {
+                    // Reutiliza String.toMinutes() de DateUtils en lugar de duplicar la lógica
+                    if (horaFin.toMinutes() <= horaInicio.toMinutes()) {
                         errorHorario = true
                         return@Button
                     }
@@ -495,7 +312,8 @@ fun AddEditClaseDialog(
                             ClaseAlumnoCrossRef(
                                 claseId = clase?.id ?: 0,
                                 alumnoId = alumno.id,
-                                precioIndividual = preciosPorAlumno[alumno.id]?.toDoubleOrNull() ?: alumno.precioPorDefecto,
+                                precioIndividual = preciosPorAlumno[alumno.id]?.toDoubleOrNull()
+                                    ?: alumno.precioPorDefecto,
                                 estadoPago = estadosPagoPorAlumno[alumno.id] ?: EstadoPago.PENDIENTE
                             )
                         }
@@ -512,6 +330,267 @@ fun AddEditClaseDialog(
         }
     )
 }
+
+// ── Sub-composables ───────────────────────────────────────────────────────────
+
+@Composable
+private fun DialogTitleRow(
+    esEdicion: Boolean,
+    onDelete: (() -> Unit)?,
+    onShowDeleteConfirm: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(if (esEdicion) "Editar clase" else "Nueva clase")
+        if (esEdicion && onDelete != null) {
+            IconButton(onClick = onShowDeleteConfirm) {
+                Icon(Icons.Filled.Delete, "Eliminar", tint = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlumnosSelectorSection(
+    esEdicion: Boolean,
+    alumnos: List<Alumno>,
+    slotsAlumnos: List<Alumno?>,
+    alumnosFinales: List<Alumno>,
+    onUpdateSlot: (Int, Alumno) -> Unit,
+    onRemoveSlot: (Int) -> Unit,
+    onAddSlot: () -> Unit
+) {
+    Text("Alumnos", style = MaterialTheme.typography.labelLarge)
+
+    when {
+        alumnos.isEmpty() -> {
+            Text(
+                "No hay alumnos creados. Creá un alumno primero.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+        esEdicion -> {
+            Text(
+                text = alumnosFinales.joinToString(", ") { it.nombreCompleto },
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        else -> {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                slotsAlumnos.forEachIndexed { index, selected ->
+                    SearchableAlumnoDropdown(
+                        alumnos = alumnos,
+                        selectedAlumno = selected,
+                        onAlumnoSelected = { onUpdateSlot(index, it) },
+                        onRemove = if (slotsAlumnos.size > 1) { { onRemoveSlot(index) } } else null
+                    )
+                }
+                TextButton(onClick = onAddSlot) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Agregar otro alumno")
+                }
+            }
+            if (alumnosFinales.isEmpty()) {
+                Text(
+                    "Seleccioná al menos un alumno.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreciosPagosSection(
+    esEdicion: Boolean,
+    alumnosFinales: List<Alumno>,
+    preciosPorAlumno: Map<Int, String>,
+    estadosPagoPorAlumno: Map<Int, EstadoPago>,
+    onPrecioChange: (Int, String) -> Unit,
+    onEstadoPagoChange: (Int, EstadoPago) -> Unit
+) {
+    if (alumnosFinales.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            if (esEdicion) "Precios y estado de pago" else "Precio por alumno",
+            style = MaterialTheme.typography.labelLarge
+        )
+        alumnosFinales.forEach { alumno ->
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = alumno.nombre,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = preciosPorAlumno[alumno.id] ?: "0",
+                        onValueChange = { onPrecioChange(alumno.id, it) },
+                        label = { Text("Precio") },
+                        modifier = Modifier.width(130.dp),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        prefix = { Text("$") }
+                    )
+                }
+                if (esEdicion) {
+                    val estadoPago = estadosPagoPorAlumno[alumno.id] ?: EstadoPago.PENDIENTE
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Spacer(modifier = Modifier.weight(1f))
+                        EstadoPago.entries.forEach { ep ->
+                            FilterChip(
+                                selected = estadoPago == ep,
+                                onClick = { onEstadoPagoChange(alumno.id, ep) },
+                                label = { Text(ep.displayName) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FechaSelectorField(
+    fechaSeleccionada: LocalDate,
+    onClickFecha: () -> Unit
+) {
+    Box(modifier = Modifier.clickable { onClickFecha() }) {
+        OutlinedTextField(
+            value = "${fechaSeleccionada.dayOfMonth}/${fechaSeleccionada.monthValue}/${fechaSeleccionada.year}",
+            onValueChange = {},
+            readOnly = true,
+            enabled = false,
+            label = { Text("Fecha") },
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+            ),
+            trailingIcon = {
+                Icon(Icons.Filled.CalendarToday, contentDescription = "Cambiar fecha")
+            }
+        )
+    }
+}
+
+@Composable
+private fun HorarioSelectorRow(
+    horaInicio: String,
+    horaFin: String,
+    tieneError: Boolean,
+    onClickInicio: () -> Unit,
+    onClickFin: () -> Unit
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box(modifier = Modifier.weight(1f).clickable { onClickInicio() }) {
+            OutlinedTextField(
+                value = horaInicio,
+                onValueChange = {},
+                readOnly = true,
+                enabled = false,
+                label = { Text("Inicio") },
+                modifier = Modifier.fillMaxWidth(),
+                isError = tieneError,
+                colors = OutlinedTextFieldDefaults.colors(
+                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                    disabledBorderColor = if (tieneError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                    disabledLabelColor = if (tieneError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                trailingIcon = { Icon(Icons.Filled.AccessTime, contentDescription = "Cambiar inicio") }
+            )
+        }
+        Box(modifier = Modifier.weight(1f).clickable { onClickFin() }) {
+            OutlinedTextField(
+                value = horaFin,
+                onValueChange = {},
+                readOnly = true,
+                enabled = false,
+                label = { Text("Fin") },
+                modifier = Modifier.fillMaxWidth(),
+                isError = tieneError,
+                colors = OutlinedTextFieldDefaults.colors(
+                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                    disabledBorderColor = if (tieneError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                    disabledLabelColor = if (tieneError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                trailingIcon = { Icon(Icons.Filled.AccessTime, contentDescription = "Cambiar fin") }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ErroresHorarioSection(errorHorario: Boolean, errorSolapamiento: Boolean) {
+    AnimatedVisibility(visible = errorHorario) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+            Text(
+                "La hora de fin debe ser posterior al inicio.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+    AnimatedVisibility(visible = errorSolapamiento) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(Icons.Filled.Warning, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+            Text(
+                "Ya existe una clase en ese horario.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+}
+
+@Composable
+private fun EstadoClaseSection(
+    estadoClase: EstadoClase,
+    onEstadoChange: (EstadoClase) -> Unit
+) {
+    Text("Estado de la clase", style = MaterialTheme.typography.labelLarge)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        EstadoClase.entries.forEach { estado ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                RadioButton(selected = estadoClase == estado, onClick = { onEstadoChange(estado) })
+                Text(estado.displayName, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+// ── Componentes de soporte ────────────────────────────────────────────────────
 
 @Composable
 fun TimePickerDialog(
@@ -542,9 +621,7 @@ fun SearchableAlumnoDropdown(
     var searchQuery by remember { mutableStateOf(selectedAlumno?.nombreCompleto ?: "") }
 
     LaunchedEffect(selectedAlumno) {
-        if (selectedAlumno != null) {
-            searchQuery = selectedAlumno.nombreCompleto
-        }
+        if (selectedAlumno != null) searchQuery = selectedAlumno.nombreCompleto
     }
 
     val filteredAlumnos = alumnos.filter {
@@ -559,10 +636,7 @@ fun SearchableAlumnoDropdown(
         ) {
             OutlinedTextField(
                 value = searchQuery,
-                onValueChange = {
-                    searchQuery = it
-                    expanded = true
-                },
+                onValueChange = { searchQuery = it; expanded = true },
                 modifier = Modifier
                     .menuAnchor(MenuAnchorType.PrimaryEditable, enabled = true)
                     .fillMaxWidth(),

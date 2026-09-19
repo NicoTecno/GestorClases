@@ -1,11 +1,8 @@
 package com.nico.gestorclases.ui.screens.students
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -13,14 +10,12 @@ import androidx.compose.material.icons.filled.GroupOff
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.nico.gestorclases.data.model.Alumno
+import com.nico.gestorclases.ui.components.AlumnoCard
 import com.nico.gestorclases.ui.components.EmptyState
-import com.nico.gestorclases.ui.components.NivelBadge
 import com.nico.gestorclases.ui.dialogs.AddEditAlumnoDialog
 import com.nico.gestorclases.viewmodel.StudentsViewModel
 
@@ -55,7 +50,6 @@ fun StudentsScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Buscador
             OutlinedTextField(
                 value = busqueda,
                 onValueChange = { viewModel.actualizarBusqueda(it) },
@@ -72,8 +66,10 @@ fun StudentsScreen(
                 EmptyState(
                     icon = Icons.Filled.GroupOff,
                     title = "Sin resultados",
-                    subtitle = if (busqueda.isBlank()) "Aún no tenés alumnos registrados. Creá uno para empezar."
-                               else "No se encontraron alumnos con esa búsqueda.",
+                    subtitle = if (busqueda.isBlank())
+                        "Aún no tenés alumnos registrados. Creá uno para empezar."
+                    else
+                        "No se encontraron alumnos con esa búsqueda.",
                     modifier = Modifier.weight(1f)
                 )
             } else {
@@ -101,52 +97,5 @@ fun StudentsScreen(
                 mostrarDialogoAdd = false
             }
         )
-    }
-}
-
-@Composable
-fun AlumnoCard(alumno: Alumno, onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Avatar con iniciales
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primaryContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = alumno.iniciales,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-            
-            Spacer(Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = alumno.nombreCompleto,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(Modifier.height(4.dp))
-                NivelBadge(label = alumno.nivelEducativo.displayName)
-            }
-        }
     }
 }

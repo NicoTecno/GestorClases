@@ -9,13 +9,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavDestination.Companion.hierarchy
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.nico.gestorclases.GestorClasesApp
+import com.nico.gestorclases.navigation.AppRoute
 import com.nico.gestorclases.ui.screens.calendar.CalendarScreen
 import com.nico.gestorclases.ui.screens.home.HomeScreen
 import com.nico.gestorclases.ui.screens.students.StudentDetailScreen
@@ -23,8 +24,8 @@ import com.nico.gestorclases.ui.screens.students.StudentsScreen
 import com.nico.gestorclases.viewmodel.CalendarViewModel
 import com.nico.gestorclases.viewmodel.HomeViewModel
 import com.nico.gestorclases.viewmodel.StudentsViewModel
-
 import com.nico.gestorclases.viewmodel.AuthViewModel
+import kotlin.reflect.KClass
 
 @Composable
 fun AppNavigation() {
@@ -40,9 +41,11 @@ fun AppNavigation() {
     val studentsViewModel: StudentsViewModel = viewModel(factory = factory)
     val authViewModel: AuthViewModel = viewModel(factory = factory)
 
-    // Rutas donde se muestra el BottomBar
-    val bottomBarRoutes = BottomNavItem.items.map { it.route }
-    val showBottomBar = currentDestination?.route in bottomBarRoutes
+    // Rutas donde se muestra el BottomBar (ahora basado en las clases de los objetos)
+    val bottomBarRoutesClasses = BottomNavItem.items.map { it.route::class }
+    val showBottomBar = bottomBarRoutesClasses.any { routeClass ->
+        currentDestination?.hasRoute(routeClass) == true
+    }
 
     Scaffold(
         bottomBar = {
@@ -52,7 +55,7 @@ fun AppNavigation() {
                     tonalElevation = NavigationBarDefaults.Elevation
                 ) {
                     BottomNavItem.items.forEach { item ->
-                        val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
+                        val selected = currentDestination?.hasRoute(item.route::class) == true
                         NavigationBarItem(
                             selected = selected,
                             onClick = {
@@ -82,8 +85,8 @@ fun AppNavigation() {
             startDestination = BottomNavItem.Hoy.route,
             modifier = Modifier.padding(innerPadding),
             enterTransition = {
-                val initialIndex = BottomNavItem.items.indexOfFirst { it.route == initialState.destination.route }
-                val targetIndex = BottomNavItem.items.indexOfFirst { it.route == targetState.destination.route }
+                val initialIndex = BottomNavItem.items.indexOfFirst { it.route::class.qualifiedName == initialState.destination.route }
+                val targetIndex = BottomNavItem.items.indexOfFirst { it.route::class.qualifiedName == targetState.destination.route }
                 val direction = if (initialIndex != -1 && targetIndex != -1 && targetIndex < initialIndex) {
                     AnimatedContentTransitionScope.SlideDirection.End
                 } else {
@@ -92,8 +95,8 @@ fun AppNavigation() {
                 slideIntoContainer(direction, tween(300))
             },
             exitTransition = {
-                val initialIndex = BottomNavItem.items.indexOfFirst { it.route == initialState.destination.route }
-                val targetIndex = BottomNavItem.items.indexOfFirst { it.route == targetState.destination.route }
+                val initialIndex = BottomNavItem.items.indexOfFirst { it.route::class.qualifiedName == initialState.destination.route }
+                val targetIndex = BottomNavItem.items.indexOfFirst { it.route::class.qualifiedName == targetState.destination.route }
                 val direction = if (initialIndex != -1 && targetIndex != -1 && targetIndex < initialIndex) {
                     AnimatedContentTransitionScope.SlideDirection.End
                 } else {
@@ -102,8 +105,8 @@ fun AppNavigation() {
                 slideOutOfContainer(direction, tween(300))
             },
             popEnterTransition = {
-                val initialIndex = BottomNavItem.items.indexOfFirst { it.route == initialState.destination.route }
-                val targetIndex = BottomNavItem.items.indexOfFirst { it.route == targetState.destination.route }
+                val initialIndex = BottomNavItem.items.indexOfFirst { it.route::class.qualifiedName == initialState.destination.route }
+                val targetIndex = BottomNavItem.items.indexOfFirst { it.route::class.qualifiedName == targetState.destination.route }
                 val direction = if (initialIndex != -1 && targetIndex != -1 && targetIndex < initialIndex) {
                     AnimatedContentTransitionScope.SlideDirection.End
                 } else {
@@ -112,8 +115,8 @@ fun AppNavigation() {
                 slideIntoContainer(direction, tween(300))
             },
             popExitTransition = {
-                val initialIndex = BottomNavItem.items.indexOfFirst { it.route == initialState.destination.route }
-                val targetIndex = BottomNavItem.items.indexOfFirst { it.route == targetState.destination.route }
+                val initialIndex = BottomNavItem.items.indexOfFirst { it.route::class.qualifiedName == initialState.destination.route }
+                val targetIndex = BottomNavItem.items.indexOfFirst { it.route::class.qualifiedName == targetState.destination.route }
                 val direction = if (initialIndex != -1 && targetIndex != -1 && targetIndex < initialIndex) {
                     AnimatedContentTransitionScope.SlideDirection.End
                 } else {
@@ -122,22 +125,22 @@ fun AppNavigation() {
                 slideOutOfContainer(direction, tween(300))
             }
         ) {
-            composable(BottomNavItem.Hoy.route) {
+            composable<AppRoute.Home> {
                 HomeScreen(viewModel = homeViewModel, authViewModel = authViewModel)
             }
-            composable(BottomNavItem.Calendario.route) {
+            composable<AppRoute.Calendar> {
                 CalendarScreen(viewModel = calendarViewModel)
             }
-            composable(BottomNavItem.Alumnos.route) {
+            composable<AppRoute.Students> {
                 StudentsScreen(
                     viewModel = studentsViewModel,
                     onNavigateToDetail = { alumno ->
                         studentsViewModel.seleccionarAlumno(alumno)
-                        navController.navigate("alumno_detalle")
+                        navController.navigate(AppRoute.StudentDetail)
                     }
                 )
             }
-            composable("alumno_detalle") {
+            composable<AppRoute.StudentDetail> {
                 StudentDetailScreen(
                     viewModel = studentsViewModel,
                     onBack = { navController.popBackStack() }

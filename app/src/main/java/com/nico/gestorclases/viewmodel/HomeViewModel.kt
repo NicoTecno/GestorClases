@@ -2,62 +2,76 @@ package com.nico.gestorclases.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.nico.gestorclases.data.model.Alumno
 import com.nico.gestorclases.data.model.Clase
 import com.nico.gestorclases.data.model.ClaseAlumnoCrossRef
 import com.nico.gestorclases.data.model.ClaseConAlumnos
 import com.nico.gestorclases.data.repository.AlumnoRepository
 import com.nico.gestorclases.data.repository.ClaseRepository
 import com.nico.gestorclases.utils.DateUtils.toStartOfDayMillis
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import java.time.LocalDate
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModel(
     private val alumnoRepository: AlumnoRepository,
-    private val claseRepository: ClaseRepository
+    claseRepository: ClaseRepository
 ) : ViewModel() {
 
-    private val hoy: LocalDate = LocalDate.now()
-    private val hoyMillis: Long = hoy.toStartOfDayMillis()
+    /** Delegado con toda la lógica de escritura sobre clases. */
+    private val claseActions = ClaseActionsDelegate(claseRepository, viewModelScope)
 
-    val clasesDeHoy: StateFlow<List<ClaseConAlumnos>> =
-        claseRepository.getClasesDelDia(hoyMillis)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    /**
+     * Fecha "de hoy" como StateFlow mutable.
+     * La Screen llama a [refreshFechaHoy] en cada RESUMED para evitar que la fecha
+     * se congele si la app pasa la medianoche en background.
+     */
+    private val _fechaHoy = MutableStateFlow(LocalDate.now())
+    val fechaHoy: StateFlow<LocalDate> = _fechaHoy.asStateFlow()
 
-    val todosLosAlumnos: StateFlow<List<Alumno>> =
+    /** Clases del día reactivas: se re-consultan al cambiar [_fechaHoy]. */
+    val clasesDeHoy: StateFlow<List<ClaseConAlumnos>> = _fechaHoy
+        .flatMapLatest { fecha ->
+            claseRepository.getClasesDelDia(fecha.toStartOfDayMillis())
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val todosLosAlumnos: StateFlow<List<com.nico.gestorclases.data.model.Alumno>> =
         alumnoRepository.todosLosAlumnos
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    fun agregarClase(clase: Clase, crossRefs: List<ClaseAlumnoCrossRef>) = viewModelScope.launch {
-        claseRepository.insertarClaseConAlumnos(clase, crossRefs)
+    /** Actualiza la fecha solo si cambió (evita recomposiciones y queries innecesarias). */
+    fun refreshFechaHoy() {
+        val today = LocalDate.now()
+        if (_fechaHoy.value != today) _fechaHoy.value = today
     }
 
-    fun actualizarClase(clase: Clase) = viewModelScope.launch {
-        claseRepository.actualizarClase(clase)
-    }
+    // ── Delegación explícita de acciones ──────────────────────────────────────
+
+    fun agregarClase(clase: Clase, crossRefs: List<ClaseAlumnoCrossRef>) =
+        claseActions.agregarClase(clase, crossRefs)
+
+    fun actualizarClase(clase: Clase) =
+        claseActions.actualizarClase(clase)
 
     fun actualizarClaseConAlumnos(clase: Clase, crossRefs: List<ClaseAlumnoCrossRef>) =
-        viewModelScope.launch {
-            claseRepository.actualizarClaseConAlumnos(clase, crossRefs)
-        }
+        claseActions.actualizarClaseConAlumnos(clase, crossRefs)
 
-    fun marcarPagado(crossRef: ClaseAlumnoCrossRef) = viewModelScope.launch {
-        claseRepository.actualizarParticipante(
-            crossRef.copy(estadoPago = com.nico.gestorclases.data.model.EstadoPago.PAGADA)
-        )
-    }
+    fun marcarPagado(crossRef: ClaseAlumnoCrossRef) =
+        claseActions.marcarPagado(crossRef)
 
-    fun eliminarClase(clase: Clase) = viewModelScope.launch {
-        claseRepository.eliminarClase(clase)
-    }
+    fun eliminarClase(clase: Clase) =
+        claseActions.eliminarClase(clase)
 
     suspend fun validarSolapamiento(
         fecha: Long,
         horaInicio: String,
         horaFin: String,
         claseIdIgnorar: Int = 0
-    ): Boolean = claseRepository.haySolapamientoDeHorario(fecha, horaInicio, horaFin, claseIdIgnorar)
+    ): Boolean = claseActions.validarSolapamiento(fecha, horaInicio, horaFin, claseIdIgnorar)
 }

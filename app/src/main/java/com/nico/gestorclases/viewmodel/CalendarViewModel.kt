@@ -16,7 +16,6 @@ import com.nico.gestorclases.utils.DateUtils.toStartMillis
 import com.nico.gestorclases.utils.DateUtils.toStartOfDayMillis
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -42,8 +41,11 @@ data class CierreDelMesInfo(
 @OptIn(ExperimentalCoroutinesApi::class)
 class CalendarViewModel(
     private val alumnoRepository: AlumnoRepository,
-    private val claseRepository: ClaseRepository
+    claseRepository: ClaseRepository
 ) : ViewModel() {
+
+    /** Delegado con toda la lógica de escritura sobre clases. */
+    private val claseActions = ClaseActionsDelegate(claseRepository, viewModelScope)
 
     private val _mesActual = MutableStateFlow(YearMonth.now())
     val mesActual: StateFlow<YearMonth> = _mesActual.asStateFlow()
@@ -75,74 +77,43 @@ class CalendarViewModel(
         calcularCierre(clases)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
-    // ────────────────────────── Navegación ──────────────────────────
+    // ── Navegación de mes ─────────────────────────────────────────────────────
 
-    fun irMesAnterior() {
-        _mesActual.value = _mesActual.value.minusMonths(1)
-    }
+    fun irMesAnterior() { _mesActual.value = _mesActual.value.minusMonths(1) }
 
-    fun irMesSiguiente() {
-        _mesActual.value = _mesActual.value.plusMonths(1)
-    }
+    fun irMesSiguiente() { _mesActual.value = _mesActual.value.plusMonths(1) }
 
     fun seleccionarFecha(fecha: LocalDate) {
         _fechaSeleccionada.value = fecha
         val nuevoMes = YearMonth.of(fecha.year, fecha.month)
-        if (nuevoMes != _mesActual.value) {
-            _mesActual.value = nuevoMes
-        }
+        if (nuevoMes != _mesActual.value) _mesActual.value = nuevoMes
     }
 
-    // ────────────────────────── CRUD de Clases ──────────────────────────
+    // ── Delegación explícita de acciones ──────────────────────────────────────
 
-    /**
-     * Crea una clase nueva con sus participantes en una transacción atómica.
-     */
-    fun agregarClase(clase: Clase, crossRefs: List<ClaseAlumnoCrossRef>) = viewModelScope.launch {
-        claseRepository.insertarClaseConAlumnos(clase, crossRefs)
-    }
+    fun agregarClase(clase: Clase, crossRefs: List<ClaseAlumnoCrossRef>) =
+        claseActions.agregarClase(clase, crossRefs)
 
-    /**
-     * Actualiza solo el evento de la clase (horas, estado, notas).
-     * Útil para "Marcar como Dada" o cambiar el estado del evento.
-     */
-    fun actualizarClase(clase: Clase) = viewModelScope.launch {
-        claseRepository.actualizarClase(clase)
-    }
+    fun actualizarClase(clase: Clase) =
+        claseActions.actualizarClase(clase)
 
-    /**
-     * Actualiza la clase completa: evento + lista de participantes.
-     */
     fun actualizarClaseConAlumnos(clase: Clase, crossRefs: List<ClaseAlumnoCrossRef>) =
-        viewModelScope.launch {
-            claseRepository.actualizarClaseConAlumnos(clase, crossRefs)
-        }
+        claseActions.actualizarClaseConAlumnos(clase, crossRefs)
 
-    /**
-     * Marca el pago de un alumno específico en una clase grupal.
-     */
-    fun marcarPagado(crossRef: ClaseAlumnoCrossRef) = viewModelScope.launch {
-        claseRepository.actualizarParticipante(crossRef.copy(estadoPago = EstadoPago.PAGADA))
-    }
+    fun marcarPagado(crossRef: ClaseAlumnoCrossRef) =
+        claseActions.marcarPagado(crossRef)
 
-    fun eliminarClase(clase: Clase) = viewModelScope.launch {
-        claseRepository.eliminarClase(clase)
-    }
+    fun eliminarClase(clase: Clase) =
+        claseActions.eliminarClase(clase)
 
-    // ────────────────────────── Validación ──────────────────────────
-
-    /**
-     * Retorna true si el horario propuesto entra en conflicto con clases existentes.
-     * Se evalúa en el hilo de IO mediante una coroutine.
-     */
     suspend fun validarSolapamiento(
         fecha: Long,
         horaInicio: String,
         horaFin: String,
         claseIdIgnorar: Int = 0
-    ): Boolean = claseRepository.haySolapamientoDeHorario(fecha, horaInicio, horaFin, claseIdIgnorar)
+    ): Boolean = claseActions.validarSolapamiento(fecha, horaInicio, horaFin, claseIdIgnorar)
 
-    // ────────────────────────── Cierre del Mes ──────────────────────────
+    // ── Cierre del mes ────────────────────────────────────────────────────────
 
     private fun calcularCierre(clases: List<ClaseConAlumnos>): CierreDelMesInfo? {
         if (clases.isEmpty()) return null

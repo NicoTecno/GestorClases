@@ -15,8 +15,11 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalCoroutinesApi::class)
 class StudentsViewModel(
     private val alumnoRepository: AlumnoRepository,
-    private val claseRepository: ClaseRepository
+    claseRepository: ClaseRepository
 ) : ViewModel() {
+
+    /** Delegado con toda la lógica de escritura sobre clases. */
+    private val claseActions = ClaseActionsDelegate(claseRepository, viewModelScope)
 
     private val _busqueda = MutableStateFlow("")
     val busqueda: StateFlow<String> = _busqueda.asStateFlow()
@@ -27,30 +30,22 @@ class StudentsViewModel(
     val alumnosFiltrados: StateFlow<List<Alumno>> = _busqueda
         .debounce(300)
         .flatMapLatest { query ->
-            if (query.isBlank()) {
-                alumnoRepository.todosLosAlumnos
-            } else {
-                alumnoRepository.buscarAlumnos(query)
-            }
+            if (query.isBlank()) alumnoRepository.todosLosAlumnos
+            else alumnoRepository.buscarAlumnos(query)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val clasesDelAlumnoSeleccionado: StateFlow<List<ClaseConAlumnos>> =
         _alumnoSeleccionado.flatMapLatest { alumno ->
-            if (alumno != null) {
-                claseRepository.getClasesDeAlumno(alumno.id)
-            } else {
-                flowOf(emptyList())
-            }
+            if (alumno != null) claseRepository.getClasesDeAlumno(alumno.id)
+            else flowOf(emptyList())
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    fun actualizarBusqueda(query: String) {
-        _busqueda.value = query
-    }
+    // ── Gestión de alumnos ────────────────────────────────────────────────────
 
-    fun seleccionarAlumno(alumno: Alumno?) {
-        _alumnoSeleccionado.value = alumno
-    }
+    fun actualizarBusqueda(query: String) { _busqueda.value = query }
+
+    fun seleccionarAlumno(alumno: Alumno?) { _alumnoSeleccionado.value = alumno }
 
     fun agregarAlumno(alumno: Alumno) = viewModelScope.launch {
         alumnoRepository.insertarAlumno(alumno)
@@ -64,34 +59,24 @@ class StudentsViewModel(
         alumnoRepository.eliminarAlumno(alumno)
     }
 
-    // ─────────────────── Acciones sobre Clases ───────────────────
+    // ── Delegación explícita de acciones sobre clases ─────────────────────────
 
-    /** Actualiza solo el evento (estadoClase, fecha, horas). */
-    fun actualizarClase(clase: Clase) = viewModelScope.launch {
-        claseRepository.actualizarClase(clase)
-    }
+    fun actualizarClase(clase: Clase) =
+        claseActions.actualizarClase(clase)
 
-    /** Actualiza la clase y todos sus participantes (edición completa). */
     fun actualizarClaseConAlumnos(clase: Clase, crossRefs: List<ClaseAlumnoCrossRef>) =
-        viewModelScope.launch {
-            claseRepository.actualizarClaseConAlumnos(clase, crossRefs)
-        }
+        claseActions.actualizarClaseConAlumnos(clase, crossRefs)
 
-    /** Marca el pago de un alumno específico en una clase. */
-    fun marcarPagado(crossRef: ClaseAlumnoCrossRef) = viewModelScope.launch {
-        claseRepository.actualizarParticipante(
-            crossRef.copy(estadoPago = com.nico.gestorclases.data.model.EstadoPago.PAGADA)
-        )
-    }
+    fun marcarPagado(crossRef: ClaseAlumnoCrossRef) =
+        claseActions.marcarPagado(crossRef)
 
-    fun eliminarClase(clase: Clase) = viewModelScope.launch {
-        claseRepository.eliminarClase(clase)
-    }
+    fun eliminarClase(clase: Clase) =
+        claseActions.eliminarClase(clase)
 
     suspend fun validarSolapamiento(
         fecha: Long,
         horaInicio: String,
         horaFin: String,
         claseIdIgnorar: Int = 0
-    ): Boolean = claseRepository.haySolapamientoDeHorario(fecha, horaInicio, horaFin, claseIdIgnorar)
+    ): Boolean = claseActions.validarSolapamiento(fecha, horaInicio, horaFin, claseIdIgnorar)
 }
