@@ -61,6 +61,6 @@ class ClaseActionsDelegate(
         fecha: Long,
         horaInicio: String,
         horaFin: String,
-        claseIdIgnorar: Int = 0
+        claseIdIgnorar: String = ""
     ): Boolean = claseRepository.haySolapamientoDeHorario(fecha, horaInicio, horaFin, claseIdIgnorar)
 }

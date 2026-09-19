@@ -44,6 +44,6 @@ data class ClaseConAlumnos(
      * Devuelve la cross-ref del alumno con [alumnoId] dado.
      * Útil para mostrar precio/pago de un alumno específico en pantallas de detalle.
      */
-    fun participanteDe(alumnoId: Int): ClaseAlumnoCrossRef? =
+    fun participanteDe(alumnoId: String): ClaseAlumnoCrossRef? =
         participantes.find { it.alumnoId == alumnoId }
 }

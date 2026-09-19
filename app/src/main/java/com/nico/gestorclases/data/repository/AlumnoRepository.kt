@@ -10,9 +10,9 @@ class AlumnoRepository(private val alumnoDao: AlumnoDao) {
 
     fun buscarAlumnos(query: String): Flow<List<Alumno>> = alumnoDao.searchAlumnos(query)
 
-    suspend fun getAlumnoById(id: Int): Alumno? = alumnoDao.getAlumnoById(id)
+    suspend fun getAlumnoById(id: String): Alumno? = alumnoDao.getAlumnoById(id)
 
-    suspend fun insertarAlumno(alumno: Alumno): Long = alumnoDao.insertAlumno(alumno)
+    suspend fun insertarAlumno(alumno: Alumno) = alumnoDao.insertAlumno(alumno)
 
     suspend fun actualizarAlumno(alumno: Alumno) = alumnoDao.updateAlumno(alumno)
 

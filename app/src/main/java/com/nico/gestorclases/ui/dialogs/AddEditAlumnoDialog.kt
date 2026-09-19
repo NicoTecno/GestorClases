@@ -143,7 +143,7 @@ fun AddEditAlumnoDialog(
                 onClick = {
                     val precioDouble = precio.toDoubleOrNull() ?: 0.0
                     val nuevoAlumno = Alumno(
-                        id = alumno?.id ?: 0,
+                        id = alumno?.id ?: java.util.UUID.randomUUID().toString(),
                         nombre = nombre.trim(),
                         apellido = apellido.trim(),
                         nivelEducativo = nivelEducativo,

@@ -30,8 +30,8 @@ import androidx.room.Index
     indices = [Index("claseId"), Index("alumnoId")]
 )
 data class ClaseAlumnoCrossRef(
-    val claseId: Int,
-    val alumnoId: Int,
+    val claseId: String,
+    val alumnoId: String,
     val precioIndividual: Double = 0.0,
     val estadoPago: EstadoPago = EstadoPago.PENDIENTE
 )

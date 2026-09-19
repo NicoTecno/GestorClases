@@ -11,7 +11,7 @@ import com.nico.gestorclases.data.model.ClaseAlumnoCrossRef
 
 @Database(
     entities = [Alumno::class, Clase::class, ClaseAlumnoCrossRef::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

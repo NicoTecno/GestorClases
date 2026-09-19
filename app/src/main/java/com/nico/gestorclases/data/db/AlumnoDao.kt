@@ -19,10 +19,16 @@ interface AlumnoDao {
     fun searchAlumnos(query: String): Flow<List<Alumno>>
 
     @Query("SELECT * FROM alumnos WHERE id = :id")
-    suspend fun getAlumnoById(id: Int): Alumno?
+    suspend fun getAlumnoById(id: String): Alumno?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertAlumno(alumno: Alumno): Long
+    suspend fun insertAlumno(alumno: Alumno)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAlumnos(alumnos: List<Alumno>)
+
+    @Query("DELETE FROM alumnos")
+    suspend fun deleteAllAlumnos()
 
     @Update
     suspend fun updateAlumno(alumno: Alumno)

@@ -34,7 +34,7 @@ interface ClaseDao {
            WHERE cr.alumnoId = :alumnoId
            ORDER BY c.fecha DESC, c.horaInicio"""
     )
-    fun getClasesDeAlumno(alumnoId: Int): Flow<List<ClaseConAlumnos>>
+    fun getClasesDeAlumno(alumnoId: String): Flow<List<ClaseConAlumnos>>
 
     /**
      * Devuelve las clases de un día específico (para validación anti-solapamiento).
@@ -52,7 +52,10 @@ interface ClaseDao {
     // ───────────────────────────── Inserts y Updates ────────────────────────────
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertClase(clase: Clase): Long
+    suspend fun insertClase(clase: Clase)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertClases(clases: List<Clase>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCrossRef(crossRef: ClaseAlumnoCrossRef)
@@ -68,11 +71,10 @@ interface ClaseDao {
     suspend fun insertClaseConAlumnos(
         clase: Clase,
         crossRefs: List<ClaseAlumnoCrossRef>
-    ): Long {
-        val claseId = insertClase(clase)
-        val refsConId = crossRefs.map { it.copy(claseId = claseId.toInt()) }
+    ) {
+        insertClase(clase)
+        val refsConId = crossRefs.map { it.copy(claseId = clase.id) }
         insertCrossRefs(refsConId)
-        return claseId
     }
 
     @Update
@@ -88,7 +90,13 @@ interface ClaseDao {
 
     /** Elimina todos los participantes de una clase (útil antes de re-insertar al editar). */
     @Query("DELETE FROM clase_alumno_cross_ref WHERE claseId = :claseId")
-    suspend fun deleteCrossRefsDeClase(claseId: Int)
+    suspend fun deleteCrossRefsDeClase(claseId: String)
+
+    @Query("DELETE FROM clases")
+    suspend fun deleteAllClases()
+
+    @Query("DELETE FROM clase_alumno_cross_ref")
+    suspend fun deleteAllCrossRefs()
 
     /**
      * Actualiza la clase y reemplaza todos sus participantes en una transacción.

@@ -15,7 +15,7 @@ class ClaseRepository(private val claseDao: ClaseDao) {
     fun getClasesDelMes(inicioMes: Long, finMes: Long): Flow<List<ClaseConAlumnos>> =
         claseDao.getClasesDelMes(inicioMes, finMes)
 
-    fun getClasesDeAlumno(alumnoId: Int): Flow<List<ClaseConAlumnos>> =
+    fun getClasesDeAlumno(alumnoId: String): Flow<List<ClaseConAlumnos>> =
         claseDao.getClasesDeAlumno(alumnoId)
 
     // ───────────────────────── Inserción ─────────────────────────
@@ -26,7 +26,7 @@ class ClaseRepository(private val claseDao: ClaseDao) {
     suspend fun insertarClaseConAlumnos(
         clase: Clase,
         crossRefs: List<ClaseAlumnoCrossRef>
-    ): Long = claseDao.insertClaseConAlumnos(clase, crossRefs)
+    ) = claseDao.insertClaseConAlumnos(clase, crossRefs)
 
     // ───────────────────────── Actualización ─────────────────────
 
@@ -73,7 +73,7 @@ class ClaseRepository(private val claseDao: ClaseDao) {
         fecha: Long,
         horaInicio: String,
         horaFin: String,
-        claseIdIgnorar: Int = 0
+        claseIdIgnorar: String = ""
     ): Boolean {
         val clasesDelDia = claseDao.getClasesDelDiaSuspend(fecha)
         return clasesDelDia

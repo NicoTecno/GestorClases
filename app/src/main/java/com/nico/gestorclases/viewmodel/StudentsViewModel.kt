@@ -77,6 +77,6 @@ class StudentsViewModel(
         fecha: Long,
         horaInicio: String,
         horaFin: String,
-        claseIdIgnorar: Int = 0
+        claseIdIgnorar: String = ""
     ): Boolean = claseActions.validarSolapamiento(fecha, horaInicio, horaFin, claseIdIgnorar)
 }

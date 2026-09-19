@@ -27,7 +27,7 @@ class GestorClasesApp : Application() {
     val alumnoRepository by lazy { AlumnoRepository(database.alumnoDao()) }
     val claseRepository by lazy { ClaseRepository(database.claseDao()) }
     val authRepository by lazy { AuthRepository() }
-    val cloudSyncManager by lazy { CloudSyncManager(database, applicationScope) }
+    val cloudSyncManager by lazy { CloudSyncManager(database, applicationScope, applicationContext) }
     val viewModelFactory by lazy {
         ViewModelFactory(alumnoRepository, claseRepository, authRepository, cloudSyncManager)
     }

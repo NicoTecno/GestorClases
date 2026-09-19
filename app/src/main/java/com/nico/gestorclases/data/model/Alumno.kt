@@ -2,11 +2,12 @@ package com.nico.gestorclases.data.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import java.util.UUID
 
 @Entity(tableName = "alumnos")
 data class Alumno(
-    @PrimaryKey(autoGenerate = true)
-    val id: Int = 0,
+    @PrimaryKey
+    val id: String = UUID.randomUUID().toString(),
     val nombre: String,
     val apellido: String,
     val nivelEducativo: NivelEducativo,

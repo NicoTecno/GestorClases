@@ -40,7 +40,7 @@ fun ClaseCard(
     onEdit: () -> Unit,
     onMarkDada: (() -> Unit)? = null,
     onMarkPagado: ((ClaseAlumnoCrossRef) -> Unit)? = null,
-    alumnoFiltradoId: Int? = null,
+    alumnoFiltradoId: String? = null,
     modifier: Modifier = Modifier
 ) {
     val clase = claseConAlumnos.clase

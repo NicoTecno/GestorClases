@@ -50,7 +50,7 @@ fun AddEditClaseDialog(
     onDismiss: () -> Unit,
     onConfirm: (ResultadoClaseDialog) -> Unit,
     onDelete: (() -> Unit)? = null,
-    validarSolapamiento: suspend (fecha: Long, inicio: String, fin: String, ignorarId: Int) -> Boolean = { _, _, _, _ -> false }
+    validarSolapamiento: suspend (fecha: Long, inicio: String, fin: String, ignorarId: String) -> Boolean = { _, _, _, _ -> false }
 ) {
     val esEdicion = claseConAlumnos != null
     val clase = claseConAlumnos?.clase
@@ -66,13 +66,13 @@ fun AddEditClaseDialog(
     var preciosPorAlumno by remember {
         mutableStateOf(
             if (esEdicion) claseConAlumnos!!.participantes.associate { it.alumnoId to it.precioIndividual.toString() }
-            else emptyMap<Int, String>()
+            else emptyMap<String, String>()
         )
     }
     var estadosPagoPorAlumno by remember {
         mutableStateOf(
             if (esEdicion) claseConAlumnos!!.participantes.associate { it.alumnoId to it.estadoPago }
-            else emptyMap<Int, EstadoPago>()
+            else emptyMap<String, EstadoPago>()
         )
     }
 
@@ -293,7 +293,7 @@ fun AddEditClaseDialog(
 
                     coroutineScope.launch {
                         val fechaMillis = fechaSeleccionada.toStartOfDayMillis()
-                        val haySolape = validarSolapamiento(fechaMillis, horaInicio, horaFin, clase?.id ?: 0)
+                        val haySolape = validarSolapamiento(fechaMillis, horaInicio, horaFin, clase?.id ?: "")
                         if (haySolape) {
                             errorSolapamiento = true
                             return@launch
@@ -301,7 +301,7 @@ fun AddEditClaseDialog(
                         errorSolapamiento = false
 
                         val nuevaClase = Clase(
-                            id = clase?.id ?: 0,
+                            id = clase?.id ?: java.util.UUID.randomUUID().toString(),
                             fecha = fechaMillis,
                             horaInicio = horaInicio,
                             horaFin = horaFin,
@@ -310,7 +310,7 @@ fun AddEditClaseDialog(
                         )
                         val crossRefs = alumnosFinales.map { alumno ->
                             ClaseAlumnoCrossRef(
-                                claseId = clase?.id ?: 0,
+                                claseId = nuevaClase.id,
                                 alumnoId = alumno.id,
                                 precioIndividual = preciosPorAlumno[alumno.id]?.toDoubleOrNull()
                                     ?: alumno.precioPorDefecto,
@@ -410,10 +410,10 @@ private fun AlumnosSelectorSection(
 private fun PreciosPagosSection(
     esEdicion: Boolean,
     alumnosFinales: List<Alumno>,
-    preciosPorAlumno: Map<Int, String>,
-    estadosPagoPorAlumno: Map<Int, EstadoPago>,
-    onPrecioChange: (Int, String) -> Unit,
-    onEstadoPagoChange: (Int, EstadoPago) -> Unit
+    preciosPorAlumno: Map<String, String>,
+    estadosPagoPorAlumno: Map<String, EstadoPago>,
+    onPrecioChange: (String, String) -> Unit,
+    onEstadoPagoChange: (String, EstadoPago) -> Unit
 ) {
     if (alumnosFinales.isEmpty()) return
 
